@@ -1,0 +1,1 @@
+"""Input module for handling text input and web scraping."""
