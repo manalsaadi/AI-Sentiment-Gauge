@@ -32,34 +32,61 @@ class Translator:
         logger.info(f"Initialized translator with {len(self.supported_pairs)} language pairs")
         
     def _ensure_translation_packages(self) -> None:
-        """Warn user to install Argos Translate language packages manually if not present."""
+        """Check and install required Argos Translate language packages."""
         try:
-            installed_languages = argostranslate.translate.get_installed_languages()
-            needed_langs = ["fr", "de", "es"]
-            installed_codes = [lang.code for lang in installed_languages]
-            for code in needed_langs:
-                if code not in installed_codes:
-                    logger.warning(f"Argos Translate language model for '{code}->en' not found. Please install it using the Argos Translate GUI or CLI.")
-        except Exception as e:
-            logger.error(f"Error checking Argos Translate language packages: {str(e)}")
-            raise
+            import argostranslate.settings
+            import argostranslate.package
             
-    def _get_supported_pairs(self) -> Dict[Tuple[str, str], argostranslate.translate.Language]:
+            # Download and install package index
+            argostranslate.package.update_package_index()
+            available_packages = argostranslate.package.get_available_packages()
+            
+            # Install required language pairs
+            required_pairs = [("fr", "en"), ("de", "en"), ("es", "en")]
+            for from_code, to_code in required_pairs:
+                # Find package for this language pair
+                package = next(
+                    (pkg for pkg in available_packages 
+                     if pkg.from_code == from_code and pkg.to_code == to_code),
+                    None
+                )
+                
+                if package:
+                    logger.info(f"Installing translation package for {from_code}->{to_code}")
+                    argostranslate.package.install_from_path(package.download())
+                else:
+                    logger.error(f"Could not find translation package for {from_code}->{to_code}")
+                    
+        except Exception as e:
+            logger.error(f"Error installing translation packages: {str(e)}")
+            raise ValueError(
+                "Failed to install translation packages. Please ensure you have internet "
+                "connection and try again. Error: " + str(e)
+            )
+            
+    def _get_supported_pairs(self):
         """Get dictionary of supported translation language pairs."""
         pairs = {}
         installed_languages = argostranslate.translate.get_installed_languages()
-        for from_lang in installed_languages:
-            from_code = from_lang.code
+
+        # Create mapping from language codes to argostranslate Language objects
+        lang_map = {lang.code: lang for lang in installed_languages}
+
+        # Build pairs using Argos Translate API; avoid relying on private attrs
+        for from_code, from_lang_obj in lang_map.items():
             if from_code not in Language.get_all_codes():
                 continue
-            for to_lang in installed_languages:
-                to_code = to_lang.code
+            for to_code, to_lang_obj in lang_map.items():
                 if to_code not in Language.get_all_codes():
                     continue
-                # Check if a translation exists
-                translations = [t for t in from_lang.translations if t.to_lang.code == to_code]
-                if translations:
-                    pairs[(from_code, to_code)] = translations[0]
+                try:
+                    translation = from_lang_obj.get_translation(to_lang_obj)
+                    # If no translation exists, Argos may raise; guard by checking attribute
+                    if translation:
+                        pairs[(from_code, to_code)] = translation
+                except Exception:
+                    # No available translation for this pair; skip
+                    continue
         return pairs
         
     def detect_language(self, text: str) -> Language:

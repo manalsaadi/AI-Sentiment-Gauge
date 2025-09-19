@@ -1,8 +1,23 @@
 """Shared test fixtures and configuration."""
 
-import pytest
+import os
+import sys
 from pathlib import Path
+import pytest
 import nltk
+from fastapi.testclient import TestClient
+from unittest.mock import patch
+
+# Add src directory to Python path
+src_path = Path(__file__).parent.parent / 'src'
+sys.path.insert(0, str(src_path))
+
+# Mock initialization functions before importing app
+with patch('translation.translator.Translator._ensure_translation_packages'), \
+     patch('translation.translator.Translator._get_supported_pairs', return_value={}), \
+     patch('preprocessing.preprocessor.TextPreprocessor._ensure_nltk_resources'), \
+     patch('analysis.sentiment_analyzer.SentimentAnalyzer._ensure_nltk_resources'):
+    from main import app
 
 def pytest_configure(config):
     """Configure pytest environment."""
@@ -43,3 +58,17 @@ def temp_report_dir(tmp_path):
     report_dir = tmp_path / "reports"
     report_dir.mkdir()
     return report_dir
+
+@pytest.fixture(scope="session")
+def test_client():
+    """Create a test client for the FastAPI application."""
+    return TestClient(app)
+
+@pytest.fixture(autouse=True)
+def no_http_requests(monkeypatch):
+    """Prevent actual HTTP requests during tests."""
+    def urlopen_mock(self, method, url, *args, **kwargs):
+        raise RuntimeError(
+            f"The test tried to make an HTTP {method} request to {url}"
+        )
+    monkeypatch.setattr("urllib3.connectionpool.HTTPConnectionPool.urlopen", urlopen_mock)
