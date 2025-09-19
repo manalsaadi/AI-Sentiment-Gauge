@@ -121,19 +121,24 @@ class Translator:
                 if char in text_lower:
                     scores[lang] += text_lower.count(char)
                     
-        # If no special characters found, attempt to detect based on common words
+        # If no special characters found, attempt to detect based on common words and apostrophe usage
         if all(score == 0 for score in scores.values()):
             common_words = {
-                Language.FRENCH: ['le', 'la', 'les', 'et', 'je', 'tu', 'il', 'nous'],
+                Language.FRENCH: ['le', 'la', 'les', 'et', 'je', 'tu', 'il', 'nous', "j'adore", "amour", "bonjour", "l'amour", "c'est", "pourquoi", "merci", "oui", "non"],
                 Language.GERMAN: ['der', 'die', 'das', 'und', 'ich', 'sie', 'ist'],
                 Language.SPANISH: ['el', 'la', 'los', 'las', 'y', 'yo', 'tu', 'es'],
                 Language.ENGLISH: ['the', 'and', 'is', 'in', 'to', 'it', 'of']
             }
-            
+
             words = text_lower.split()
             for lang, word_list in common_words.items():
                 scores[lang] = sum(1 for word in words if word in word_list)
-                
+
+            # Extra: If text contains "'" and starts with j/l/c/qu/p (French contractions), boost French score
+            if "'" in text_lower:
+                if any(text_lower.startswith(prefix) for prefix in ["j'", "l'", "c'", "qu'", "p'"]):
+                    scores[Language.FRENCH] += 1
+
         # Get language with highest score
         detected_lang = max(scores.items(), key=lambda x: x[1])[0]
         logger.debug(f"Detected language: {detected_lang.value}")

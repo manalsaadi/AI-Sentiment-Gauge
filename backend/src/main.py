@@ -56,14 +56,14 @@ async def analyze_text(input_data: TextInput):
     # Validate input
     if not input_data.text or not input_data.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
-        
+
     try:
         # Preprocess the text
         cleaned_text = preprocessor.preprocess(input_data.text)
-        
-        # Auto-detect source language if not provided
-        source_lang = input_data.source_language or translator.detect_language(cleaned_text)
-        
+
+        # Always auto-detect source language
+        source_lang = translator.detect_language(cleaned_text)
+
         # Translate if needed
         translated_text = None
         if source_lang != input_data.target_language:
@@ -74,16 +74,16 @@ async def analyze_text(input_data: TextInput):
             text_to_analyze = translated_text
         else:
             text_to_analyze = cleaned_text
-        
+
         # Analyze sentiment
         result = sentiment_analyzer.analyze_sentiment(text_to_analyze)
-        
+
         return SentimentResponse(
             text=input_data.text,
             sentiment=result['sentiment'],
             score=result['compound_score'],
             translated_text=translated_text,
-            source_language=source_lang,
+            source_language=getattr(source_lang, 'value', source_lang),
             confidence=max(result['positive_score'], result['negative_score'], result['neutral_score'])
         )
     except Exception as e:

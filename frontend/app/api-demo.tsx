@@ -7,7 +7,6 @@ const API_BASE = "http://localhost:8000";
 export default function ApiDemo() {
   // State for each form
   const [textInput, setTextInput] = useState("");
-  const [textLang, setTextLang] = useState("");
   const [textResult, setTextResult] = useState<any>(null);
   const [textError, setTextError] = useState("");
 
@@ -29,7 +28,7 @@ export default function ApiDemo() {
       const res = await fetch(`${API_BASE}/analyze/text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: textInput, source_language: textLang, target_language: "en" })
+        body: JSON.stringify({ text: textInput, target_language: "en" })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Error");
@@ -89,12 +88,6 @@ export default function ApiDemo() {
             value={textInput}
             onChange={e => setTextInput(e.target.value)}
             required
-          />
-          <input
-            className="border p-2 w-full"
-            placeholder="Source language (optional, e.g. 'en', 'fr')"
-            value={textLang}
-            onChange={e => setTextLang(e.target.value)}
           />
           <button className="bg-blue-600 text-white px-4 py-2 rounded" type="submit">Analyze</button>
         </form>
