@@ -1,0 +1,29 @@
+screen,component,name,variant,text,props,notes,order
+Dashboard Screen,Primary Button,Paste Text CTA,primary, "Paste Text",{"icon":"paste","size":"large"},navigates -> Paste Text Screen,1
+Dashboard Screen,Secondary Button,Scrape URL CTA,secondary, "Scrape URL",{"icon":"link"},navigates -> Scrape URL Screen,2
+Dashboard Screen,Secondary Button,Upload CSV CTA,secondary, "Upload CSV",{"icon":"upload"},opens file picker,3
+Dashboard Screen,Card,Recent Analyses Card,default,"Recent analyses",{"count":5},shows previous reports with quick-actions,4
+Paste Text Screen,TextArea,Comments TextArea,default,"Paste comments here...",{"rows":10},placeholder shows examples + line count,1
+Paste Text Screen,Dropdown,Language Pill,default,"Auto",{"options":["Auto","en","fr","de","es"]},toggle to select source language,2
+Paste Text Screen,Dropdown,Target Language,default,"English",{"options":["English","French"]},defaults to English,3
+Paste Text Screen,Toggle,Sample Toggle,default,"Analyze first N lines",{"default":true},for very long inputs,4
+Paste Text Screen,Primary Button,Analyze Button,primary,"Analyze",{"action":"analyze"},replaced by Inline Progress Card on tap,5
+Scrape URL Screen,Input,URL Input,default,"https://example.com/...",{"type":"url"},validate URL,1
+Scrape URL Screen,Disclosure,Advanced Disclosure,collapsed,"Advanced",{"fields":["css_selector","user_agent"]},expand to show CSS selector and UA,2
+Scrape URL Screen,Primary Button,Scrape & Analyze Button,primary,"Scrape & Analyze",{},starts scraping and shows progress,3
+Scrape URL Screen,Log,Live Fetch Log,default,"",{},streaming preview of found comments,4
+Progress Card,Stepper,StepperProgress,default,"Detect → Translate → Analyze",{"steps":["Detect","Translate","Analyze"]},shows current step and icons,1
+Progress Card,Link,Cancel Link,link,"Cancel",{},stops further processing (soft-cancel),2
+Results Screen,Chart,SentimentPie,default,"",{},pie chart + percentage chips (Positive/Neutral/Negative),1
+Results Screen,Tags,KeywordTagList,default,"",{},chips with counts and relative size,2
+Results Screen,Table,CommentTable,default,"",{"columns":["Original","Detected","Translated","Sentiment"]},filterable, pageable,3
+Results Screen,Button,Export Button,primary,"Export",{},opens Export Modal,4
+Results Screen,Banner,Banner Area,warning,"Translation unavailable — continue analysis (best-effort)",{},non-blocking warnings area,5
+Header,Icon,Translate Icon,default,"",{"action":"open_translate_modal"},opens Translate Modal,1
+Translate Modal,Input,Translate Input,default,"Type a sentence...",{"debounce_ms":300},shows detected language chip,1
+Translate Modal,Primary Button,Translate CTA,primary,"Translate",{},returns translated text and confidence,2
+Export Modal,Toggle,ToggleIncludeOriginal,default,"Include original",{},include original text in export,1
+Export Modal,Toggle,ToggleIncludeTranslations,default,"Include translations",{},include translated text in export,2
+Export Modal,Toggle,ToggleIncludeKeywordCounts,default,"Include keyword counts",{},include counts in export,3
+Export Modal,Input,Filename Input,default,"analysis-report.md",{},filename for download,4
+Export Modal,Primary Button,Download Markdown Button,primary,"Download Markdown",{},triggers file download and shows toast,5
