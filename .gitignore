@@ -26,11 +26,27 @@ env/
 ENV/
 .venv/
 
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.code-workspace
 
 # OS
 .DS_Store
@@ -38,6 +54,7 @@ Thumbs.db
 
 # Model caches - exclude large ONNX models and caches
 model_cache/
+backend/model_cache/
 backend/src/model_cache/
 *_quantized/
 *_onnx/
