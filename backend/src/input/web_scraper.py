@@ -21,6 +21,10 @@ class WebScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
         
+    def scrape(self, url: str) -> List[str]:
+        """Simple scrape method that delegates to scrape_comments for now."""
+        return self.scrape_comments(url)
+    
     def scrape_comments(self, url: str) -> List[str]:
         """Scrape comments from a given URL.
         

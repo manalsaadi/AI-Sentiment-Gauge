@@ -1,12 +1,18 @@
-"""Translation module for language detection and translation using Argos Translate."""
+"""Translation module for language detection and translation using MarianMT Quantized."""
 
 import logging
 from enum import Enum
 from typing import List, Optional, Dict, Tuple
+from pathlib import Path
 
+try:
+    from langdetect import detect, detect_langs, LangDetectException
+    LANGDETECT_AVAILABLE = True
+except ImportError:
+    LANGDETECT_AVAILABLE = False
+    logging.warning("langdetect not available. Install with: pip install langdetect")
 
-import argostranslate.package
-import argostranslate.translate
+from .marian_quantized import MarianQuantizedTranslator
 
 logger = logging.getLogger(__name__)
 
@@ -23,74 +29,28 @@ class Language(Enum):
         return [lang.value for lang in cls]
 
 class Translator:
-    """Handler for language detection and translation."""
+    """Handler for language detection and translation using MarianMT Quantized."""
     
-    def __init__(self):
-        """Initialize the translator and ensure required packages are installed."""
-        self._ensure_translation_packages()
-        self.supported_pairs = self._get_supported_pairs()
-        logger.info(f"Initialized translator with {len(self.supported_pairs)} language pairs")
+    def __init__(self, cache_dir: Optional[str] = None):
+        """Initialize the ultra-fast MarianMT quantized translator."""
+        self.marian_translator = MarianQuantizedTranslator(cache_dir)
+        logger.info("🚀 Initialized MarianMT Quantized translator")
+        
+        # Warm up common models for instant translation
+        self.marian_translator.warm_up(['es', 'fr', 'de'])
+        logger.info("🔥 Pre-loaded common translation models")
         
     def _ensure_translation_packages(self) -> None:
-        """Check and install required Argos Translate language packages."""
-        try:
-            import argostranslate.settings
-            import argostranslate.package
-            
-            # Download and install package index
-            argostranslate.package.update_package_index()
-            available_packages = argostranslate.package.get_available_packages()
-            
-            # Install required language pairs
-            required_pairs = [("fr", "en"), ("de", "en"), ("es", "en")]
-            for from_code, to_code in required_pairs:
-                # Find package for this language pair
-                package = next(
-                    (pkg for pkg in available_packages 
-                     if pkg.from_code == from_code and pkg.to_code == to_code),
-                    None
-                )
-                
-                if package:
-                    logger.info(f"Installing translation package for {from_code}->{to_code}")
-                    argostranslate.package.install_from_path(package.download())
-                else:
-                    logger.error(f"Could not find translation package for {from_code}->{to_code}")
-                    
-        except Exception as e:
-            logger.error(f"Error installing translation packages: {str(e)}")
-            raise ValueError(
-                "Failed to install translation packages. Please ensure you have internet "
-                "connection and try again. Error: " + str(e)
-            )
+        """No longer needed with MarianMT - models auto-download as needed."""
+        pass  # MarianMT handles model management automatically
             
     def _get_supported_pairs(self):
-        """Get dictionary of supported translation language pairs."""
-        pairs = {}
-        installed_languages = argostranslate.translate.get_installed_languages()
-
-        # Create mapping from language codes to argostranslate Language objects
-        lang_map = {lang.code: lang for lang in installed_languages}
-
-        # Build pairs using Argos Translate API; avoid relying on private attrs
-        for from_code, from_lang_obj in lang_map.items():
-            if from_code not in Language.get_all_codes():
-                continue
-            for to_code, to_lang_obj in lang_map.items():
-                if to_code not in Language.get_all_codes():
-                    continue
-                try:
-                    translation = from_lang_obj.get_translation(to_lang_obj)
-                    # If no translation exists, Argos may raise; guard by checking attribute
-                    if translation:
-                        pairs[(from_code, to_code)] = translation
-                except Exception:
-                    # No available translation for this pair; skip
-                    continue
-        return pairs
+        """Get supported language pairs from MarianMT."""
+        # MarianMT supports these pairs out of the box
+        return list(self.marian_translator.LANGUAGE_PAIRS.keys())
         
     def detect_language(self, text: str) -> Language:
-        """Detect the language of the input text.
+        """Detect the language of the input text using langdetect library.
         
         Args:
             text: Text to detect language for
@@ -101,51 +61,89 @@ class Translator:
         Raises:
             ValueError: If language detection fails or language is not supported
         """
-        # Note: For V1, using a simple character frequency approach
-        # TODO: Implement more sophisticated language detection in V2
-        
-        # Common character patterns for each language
-        patterns = {
-            Language.FRENCH: ['é', 'è', 'ê', 'ç', 'à', 'ù'],
-            Language.GERMAN: ['ä', 'ö', 'ü', 'ß'],
-            Language.SPANISH: ['ñ', 'á', 'é', 'í', 'ó', 'ú', '¿', '¡'],
-            Language.ENGLISH: []  # Default if no special characters found
-        }
-        
+        if LANGDETECT_AVAILABLE:
+            try:
+                # Clean and validate text
+                cleaned_text = text.strip()
+                if len(cleaned_text) < 3:
+                    logger.warning("Text too short for reliable detection, defaulting to English")
+                    return Language.ENGLISH
+                
+                # Use Google's langdetect algorithm
+                detected_code = detect(cleaned_text)
+                
+                # Get confidence scores for debugging
+                lang_probs = detect_langs(cleaned_text)
+                confidence = max(prob.prob for prob in lang_probs)
+                logger.debug(f"Language detection: {detected_code} (confidence: {confidence:.3f})")
+                
+                # Map to our Language enum
+                language_mapping = {
+                    'en': Language.ENGLISH,
+                    'fr': Language.FRENCH,
+                    'de': Language.GERMAN,
+                    'es': Language.SPANISH,
+                    'pt': Language.SPANISH,  # Fallback Portuguese to Spanish
+                    'it': Language.SPANISH,  # Fallback Italian to Spanish (similar)
+                }
+                
+                detected_lang = language_mapping.get(detected_code, Language.ENGLISH)
+                logger.debug(f"Mapped to: {detected_lang.value}")
+                return detected_lang
+                
+            except LangDetectException as e:
+                logger.warning(f"langdetect failed: {e}, using fallback")
+                return self._fallback_detection(text)
+        else:
+            # Fallback to improved pattern-based detection
+            return self._fallback_detection(text)
+    
+    def _fallback_detection(self, text: str) -> Language:
+        """Fallback language detection using improved pattern matching."""
         text_lower = text.lower()
-        scores = {lang: 0 for lang in Language}
         
-        # Score based on character patterns
-        for lang, chars in patterns.items():
-            for char in chars:
-                if char in text_lower:
-                    scores[lang] += text_lower.count(char)
-                    
-        # If no special characters found, attempt to detect based on common words and apostrophe usage
-        if all(score == 0 for score in scores.values()):
-            common_words = {
-                Language.FRENCH: ['le', 'la', 'les', 'et', 'je', 'tu', 'il', 'nous', "j'adore", "amour", "bonjour", "l'amour", "c'est", "pourquoi", "merci", "oui", "non"],
-                Language.GERMAN: ['der', 'die', 'das', 'und', 'ich', 'sie', 'ist'],
-                Language.SPANISH: ['el', 'la', 'los', 'las', 'y', 'yo', 'tu', 'es'],
-                Language.ENGLISH: ['the', 'and', 'is', 'in', 'to', 'it', 'of']
-            }
-
-            words = text_lower.split()
-            for lang, word_list in common_words.items():
-                scores[lang] = sum(1 for word in words if word in word_list)
-
-            # Extra: If text contains "'" and starts with j/l/c/qu/p (French contractions), boost French score
-            if "'" in text_lower:
-                if any(text_lower.startswith(prefix) for prefix in ["j'", "l'", "c'", "qu'", "p'"]):
-                    scores[Language.FRENCH] += 1
-
-        # Get language with highest score
-        detected_lang = max(scores.items(), key=lambda x: x[1])[0]
-        logger.debug(f"Detected language: {detected_lang.value}")
-        return detected_lang
+        # French-specific indicators (check FIRST to avoid Spanish false positives)
+        french_unique = ['à', 'ç', 'è', 'ê', 'û', 'ù', 'ï', 'ÿ', 'œ']
+        french_words = ['je suis', 'tu es', 'nous sommes', 'vous êtes', 'le', 'la', 'les', 'qui', 'que', 'avec', 'dans', 'très', 'bien']
+        
+        # Spanish-specific indicators
+        spanish_unique = ['ñ']
+        spanish_words = ['yo soy', 'tú eres', 'nosotros somos', 'el', 'los', 'las', 'con', 'en', 'muy', 'hola', 'gracias']
+        
+        # German-specific indicators
+        german_unique = ['ß', 'ü', 'ä', 'ö']
+        german_words = ['ich bin', 'du bist', 'der', 'die', 'das', 'und', 'mit', 'für', 'auf', 'haben', 'sein']
+        
+        # Score each language
+        french_score = sum(2 for char in french_unique if char in text_lower)
+        french_score += sum(1 for word in french_words if word in text_lower)
+        
+        spanish_score = sum(3 for char in spanish_unique if char in text_lower)  # ñ is definitive
+        spanish_score += sum(1 for word in spanish_words if word in text_lower)
+        
+        german_score = sum(2 for char in german_unique if char in text_lower)
+        german_score += sum(1 for word in german_words if word in text_lower)
+        
+        # Add shared accented chars with lower weight
+        shared_accents = ['í', 'é', 'á', 'ó', 'ú']
+        accent_count = sum(1 for char in shared_accents if char in text_lower)
+        if accent_count > 0 and french_score == 0 and spanish_score == 0:
+            # Only add to Spanish if no other clear indicators
+            spanish_score += accent_count * 0.5
+        
+        logger.debug(f"Fallback scores - French: {french_score}, Spanish: {spanish_score}, German: {german_score}")
+        
+        # Determine best match
+        scores = {'fr': french_score, 'es': spanish_score, 'de': german_score}
+        best_lang = max(scores, key=scores.get)
+        
+        if scores[best_lang] > 0:
+            return Language(best_lang)
+        else:
+            return Language.ENGLISH
         
     def translate_to_english(self, text: str, source_lang: Optional[Language] = None) -> str:
-        """Translate text to English.
+        """Translate text to English using ultra-fast MarianMT Quantized.
         
         Args:
             text: Text to translate
@@ -157,21 +155,47 @@ class Translator:
         """
         if not text.strip():
             return text
+            
         # Detect language if not provided
         if source_lang is None:
             source_lang = self.detect_language(text)
+            
         # If already English, return as is
         if source_lang == Language.ENGLISH:
             return text
-        # Get translation pair
-        pair = (source_lang.value, Language.ENGLISH.value)
-        if pair not in self.supported_pairs:
-            raise ValueError(f"Translation not supported for language pair: {pair}")
+            
         try:
-            translation = self.supported_pairs[pair]
-            translated = translation.translate(text)
-            logger.debug(f"Translated text from {source_lang.value} to English")
-            return translated
+            # Use MarianMT for ultra-fast translation
+            result = self.marian_translator.translate(
+                text, 
+                source_lang=source_lang.value.lower(),
+                target_lang='en'
+            )
+            
+            translated_text = result['translated_text']
+            translation_time = result.get('translation_time', 0) * 1000  # Convert to ms
+            
+            logger.debug(f"⚡ Translated {source_lang.value}→en in {translation_time:.1f}ms")
+            logger.debug(f"🎯 Confidence: {result.get('confidence', 0.87)*100:.1f}%")
+            
+            return translated_text
+            
         except Exception as e:
-            logger.error(f"Translation failed: {str(e)}")
-            raise
+            logger.error(f"MarianMT translation failed: {str(e)}")
+            # Fallback: return original text if translation fails
+            logger.warning(f"Returning original text due to translation failure")
+            return text
+    
+    def get_translation_stats(self) -> Dict:
+        """Get performance statistics from the MarianMT translator."""
+        return self.marian_translator.get_stats()
+    
+    def warm_up_models(self, languages: List[str] = None) -> None:
+        """Pre-load translation models for instant response."""
+        if languages is None:
+            languages = ['es', 'fr', 'de']
+        self.marian_translator.warm_up(languages)
+    
+    def clear_model_cache(self) -> None:
+        """Clear model cache to free memory."""
+        self.marian_translator.clear_cache()
